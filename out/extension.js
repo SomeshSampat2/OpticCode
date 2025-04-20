@@ -28,7 +28,20 @@ const vscode = __importStar(require("vscode"));
 const chatViewProvider_1 = require("./chatViewProvider");
 function activate(context) {
     console.log('▶️ Optic Code activated');
+    // register sidebar chat provider
     context.subscriptions.push(vscode.window.registerWebviewViewProvider('opticCode.chatView', new chatViewProvider_1.ChatViewProvider(context.extensionUri)));
+    // register command to open chat panel on the right
+    context.subscriptions.push(vscode.commands.registerCommand('opticCode.openChat', () => {
+        const panel = vscode.window.createWebviewPanel('opticCode.chatPanel', 'Optic Code Chat', { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false }, { enableScripts: true, localResourceRoots: [context.extensionUri] });
+        panel.webview.html = new chatViewProvider_1.ChatViewProvider(context.extensionUri).getHtml(panel.webview);
+    }));
+    // add status bar icon to open chat
+    const chatStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    chatStatusBar.text = '$(comment-discussion)';
+    chatStatusBar.tooltip = 'Open Optic Code Chat';
+    chatStatusBar.command = 'opticCode.openChat';
+    chatStatusBar.show();
+    context.subscriptions.push(chatStatusBar);
 }
 exports.activate = activate;
 function deactivate() { }
