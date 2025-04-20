@@ -35,7 +35,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private getHtml(webview: vscode.Webview): string {
+  public getHtml(webview: vscode.Webview): string {
     const nonce = this.getNonce();
     const cspSource = webview.cspSource;
     return `<!DOCTYPE html>

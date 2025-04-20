@@ -7,14 +7,16 @@
   "activationEvents": [
     "onView:opticCode.chatView",
     "onCommand:opticCode.collectContext",
-    "onCommand:opticCode.applyEdit"
+    "onCommand:opticCode.applyEdit",
+    "onCommand:opticCode.openChat"
   ],
   "categories": ["Other"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       { "command": "opticCode.collectContext", "title": "Optic Code: Collect Context" },
-      { "command": "opticCode.applyEdit", "title": "Optic Code: Apply AI Edit" }
+      { "command": "opticCode.applyEdit", "title": "Optic Code: Apply AI Edit" },
+      { "command": "opticCode.openChat", "title": "Optic Code: Open Chat" }
     ],
     "configuration": {
       "title": "Optic Code",
@@ -25,9 +27,22 @@
         }
       }
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "opticCodeChat",
+          "title": "Optic Code Chat",
+          "icon": "resources/chat.svg"
+        }
+      ]
+    },
     "views": {
-      "explorer": [
-        { "id": "opticCode.chatView", "name": "Optic Code Chat", "type": "webview" }
+      "opticCodeChat": [
+        {
+          "id": "opticCode.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
       ]
     }
   },
