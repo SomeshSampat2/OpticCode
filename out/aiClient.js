@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateEdit = void 0;
+exports.generateEditStream = exports.generateEdit = void 0;
 const vscode = __importStar(require("vscode"));
 const undici_1 = require("undici");
 globalThis.fetch = undici_1.fetch;
@@ -57,3 +57,25 @@ async function generateEdit(context, userPrompt) {
     }
 }
 exports.generateEdit = generateEdit;
+/**
+ * Streams AI-based responses for a user prompt using Gemini streaming.
+ */
+async function* generateEditStream(context, userPrompt) {
+    const config = vscode.workspace.getConfiguration('opticCode');
+    const apiKey = config.get('geminiApiKey');
+    if (!apiKey) {
+        vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+        return;
+    }
+    const ai = new genai_1.GoogleGenAI({ apiKey });
+    const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
+    const prompt = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+    const responseStream = await ai.models.generateContentStream({
+        model: 'gemini-2.0-flash',
+        contents: prompt
+    });
+    for await (const chunk of responseStream) {
+        yield chunk.text;
+    }
+}
+exports.generateEditStream = generateEditStream;

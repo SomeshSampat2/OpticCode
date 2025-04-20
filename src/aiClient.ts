@@ -31,3 +31,25 @@ export async function generateEdit(context: string[], userPrompt: string): Promi
     return '';
   }
 }
+
+/**
+ * Streams AI-based responses for a user prompt using Gemini streaming.
+ */
+export async function* generateEditStream(context: string[], userPrompt: string): AsyncGenerator<string> {
+  const config = vscode.workspace.getConfiguration('opticCode');
+  const apiKey = config.get<string>('geminiApiKey');
+  if (!apiKey) {
+    vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+    return;
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
+  const prompt = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+  const responseStream = await ai.models.generateContentStream({
+    model: 'gemini-2.0-flash',
+    contents: prompt
+  });
+  for await (const chunk of responseStream) {
+    yield chunk.text;
+  }
+}
