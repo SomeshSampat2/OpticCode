@@ -1,0 +1,51 @@
+{
+  "name": "optic-code",
+  "displayName": "Optic Code",
+  "publisher": "your-publisher-name",
+  "version": "0.0.1",
+  "engines": { "vscode": "^1.75.0" },
+  "activationEvents": [
+    "onView:opticCode.chatView",
+    "onCommand:opticCode.collectContext",
+    "onCommand:opticCode.applyEdit"
+  ],
+  "categories": ["Other"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "opticCode.collectContext", "title": "Optic Code: Collect Context" },
+      { "command": "opticCode.applyEdit", "title": "Optic Code: Apply AI Edit" }
+    ],
+    "configuration": {
+      "title": "Optic Code",
+      "properties": {
+        "opticCode.geminiApiKey": {
+          "type": "string",
+          "description": "Gemini API key for AI integration"
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        { "id": "opticCode.chatView", "name": "Optic Code Chat", "type": "webview" }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p tsconfig.json",
+    "watch": "tsc -watch -p tsconfig.json",
+    "test": "npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.60.0",
+    "@types/mocha": "^8.2.0",
+    "typescript": "^4.4.3",
+    "vscode-test": "^1.6.1"
+  },
+  "dependencies": {
+    "@google/genai": "^0.9.0",
+    "undici": "^5.20.0"
+  }
+}
