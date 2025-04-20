@@ -41,6 +41,8 @@ class ChatViewProvider {
             if (message.command === 'userPrompt') {
                 // display user message
                 webviewView.webview.postMessage({ command: 'appendMessage', sender: 'user', text: message.text });
+                // show loading shimmer phases
+                webviewView.webview.postMessage({ command: 'startLoading', phases: ['Understanding the request', 'Finding the solution', 'Thinking', 'Almost ready'] });
                 // generate AI response
                 // start with workspace context
                 const ctx = await (0, contextCollector_1.collectContext)();
@@ -50,8 +52,12 @@ class ChatViewProvider {
                     const doc = activeEditor.document;
                     ctx.unshift(`${doc.fileName}:\n${doc.getText()}\n---`);
                 }
-                const resp = await (0, aiClient_1.generateEdit)(ctx, message.text);
-                webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: resp });
+                // stream AI response in real-time
+                for await (const chunk of (0, aiClient_1.generateEditStream)(ctx, message.text)) {
+                    webviewView.webview.postMessage({ command: 'streamChunk', text: chunk });
+                }
+                // stop loading effects
+                webviewView.webview.postMessage({ command: 'stopLoading' });
             }
         });
     }
@@ -78,6 +84,12 @@ class ChatViewProvider {
     .code-header .copy-btn { cursor: pointer; color: #BBB; }
     .code-container pre { margin: 0; background: transparent; padding: 1em; overflow: auto; }
     .code-container code { background: transparent; }
+    .loading-container { position: relative; background: #2B2B2B; margin: 1em 0; border-radius: 8px; }
+    .loading-header { color: #BBB; font-size: 0.85em; padding: 0.2em 0.5em; }
+    .loading-shimmer { margin: 1em 0; }
+    .shimmer-line { position: relative; background-color: #333; height: 12px; margin: 4px 0; border-radius: 4px; overflow: hidden; }
+    .shimmer-line::before { content: ''; position: absolute; top: 0; left: -150px; width: 150px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 1.5s infinite; animation-delay: var(--delay); }
+    @keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300px); } }
     #input { display: flex; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
     #inputBox { flex: 1; padding: 8px; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; }
     #sendBtn { margin-left: 8px; padding: 8px 12px; border: none; border-radius: 4px; background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); cursor: pointer; }
@@ -97,6 +109,11 @@ class ChatViewProvider {
     // initialize markdown-it
     const md = window.markdownit({ html: true, linkify: true, typographer: true });
     const messagesDiv = document.getElementById('messages');
+    let loadingDiv = null;
+    let dotInterval = null;
+    let phaseInterval = null;
+    let streamDiv = null;
+    let streamBuffer = '';
     document.getElementById('sendBtn').addEventListener('click', () => {
       const input = document.getElementById('inputBox');
       const text = input.value;
@@ -104,7 +121,67 @@ class ChatViewProvider {
     });
     window.addEventListener('message', event => {
       const msg = event.data;
-      if (msg.command === 'appendMessage') {
+      if (msg.command === 'startLoading') {
+        if (loadingDiv) loadingDiv.remove();
+        loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message bot loading-container';
+        const header = document.createElement('div');
+        header.className = 'loading-header';
+        loadingDiv.appendChild(header);
+        // create multiline shimmer
+        const shimmerContainer = document.createElement('div');
+        shimmerContainer.className = 'loading-shimmer';
+        for (let i = 0; i < 5; i++) {
+          const line = document.createElement('div');
+          line.className = 'shimmer-line';
+          const delay = Math.random() + 's';
+          line.style.setProperty('--delay', delay);
+          const width = Math.floor(Math.random() * 50 + 50) + '%';
+          line.style.width = width;
+          shimmerContainer.appendChild(line);
+        }
+        loadingDiv.appendChild(shimmerContainer);
+        messagesDiv.appendChild(loadingDiv);
+        // animate header text and dots
+        let phaseIndex = 0, dotCount = 0;
+        header.textContent = msg.phases[0];
+        dotInterval = setInterval(() => {
+          dotCount = (dotCount % 3) + 1;
+          header.textContent = msg.phases[phaseIndex] + '.'.repeat(dotCount);
+        }, 500);
+        phaseInterval = setInterval(() => {
+          if (phaseIndex < msg.phases.length - 1) {
+            phaseIndex++;
+            dotCount = 0;
+          } else {
+            clearInterval(phaseInterval);
+          }
+        }, 2000);
+        return;
+      } else if (msg.command === 'stopLoading') {
+        clearInterval(dotInterval);
+        clearInterval(phaseInterval);
+        if (loadingDiv) loadingDiv.remove(); loadingDiv = null; streamDiv = null;
+        return;
+      } else if (msg.command === 'streamChunk') {
+        // on first chunk, clear loading shimmer
+        if (loadingDiv) {
+          clearInterval(dotInterval);
+          clearInterval(phaseInterval);
+          loadingDiv.remove();
+          loadingDiv = null;
+        }
+        if (!streamDiv) {
+          streamDiv = document.createElement('div');
+          streamDiv.className = 'message bot';
+          messagesDiv.appendChild(streamDiv);
+        }
+        streamBuffer += msg.text;
+        streamDiv.innerHTML = md.render(streamBuffer);
+        hljs.highlightAll();
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        return;
+      } else if (msg.command === 'appendMessage') {
         const div = document.createElement('div');
         div.className = 'message ' + (msg.sender === 'user' ? 'user' : 'bot');
         div.innerHTML = md.render(msg.text);
