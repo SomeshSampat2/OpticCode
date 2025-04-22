@@ -30,6 +30,7 @@ const aiClient_1 = require("./aiClient");
 class ChatViewProvider {
     constructor(extensionUri) {
         this.extensionUri = extensionUri;
+        this.conversationHistory = [];
     }
     resolveWebviewView(webviewView, context, _token) {
         console.log('▶️ ChatViewProvider.resolveWebviewView called');
@@ -39,6 +40,7 @@ class ChatViewProvider {
         webviewView.webview.html = this.getHtml(webviewView.webview);
         webviewView.webview.onDidReceiveMessage(async (message) => {
             if (message.command === 'userPrompt') {
+                this.conversationHistory.push({ sender: 'user', text: message.text });
                 // display user message
                 webviewView.webview.postMessage({ command: 'appendMessage', sender: 'user', text: message.text });
                 // show loading shimmer phases
@@ -46,18 +48,25 @@ class ChatViewProvider {
                 // generate AI response
                 // start with workspace context
                 const ctx = await (0, contextCollector_1.collectContext)();
+                if (this.conversationHistory.length > 0) {
+                    const historyText = this.conversationHistory.map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n');
+                    ctx.unshift('Conversation History:\n' + historyText);
+                }
                 // prepend active file content
                 const activeEditor = vscode.window.activeTextEditor;
                 if (activeEditor) {
                     const doc = activeEditor.document;
                     ctx.unshift(`${doc.fileName}:\n${doc.getText()}\n---`);
                 }
+                let responseText = '';
                 // stream AI response in real-time
                 for await (const chunk of (0, aiClient_1.generateEditStream)(ctx, message.text)) {
+                    responseText += chunk;
                     webviewView.webview.postMessage({ command: 'streamChunk', text: chunk });
                 }
                 // stop loading effects
                 webviewView.webview.postMessage({ command: 'stopLoading' });
+                this.conversationHistory.push({ sender: 'bot', text: responseText });
             }
         });
     }
@@ -73,27 +82,27 @@ class ChatViewProvider {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
   <title>Optic Code Chat</title>
   <style>
-    body { font-family: var(--vscode-editor-font-family); color: var(--vscode-editor-foreground); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+    body { font-family: var(--vscode-editor-font-family); color: var(--vscode-editor-foreground); margin: 0; display: flex; flex-direction: column; height: 100vh; font-size: 0.7rem; }
     #messages { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; }
-    .message { max-width: 80%; margin: 5px 0; padding: 10px; border-radius: 8px; word-wrap: break-word; }
-    .user { align-self: flex-end; background-color: var(--vscode-editor-widget-background); }
-    .bot { align-self: flex-start; background-color: var(--vscode-input-background); }
+    .message { max-width: 80%; margin: 5px 0; padding: 6px; border-radius: 8px; word-wrap: break-word; font-size: 0.7rem; }
+    .user { align-self: flex-end; background-color: var(--vscode-input-background); padding: 1px 6px; margin: 2px 0; }
+    .bot { align-self: flex-start; background-color: transparent; max-width: 100%; padding-right: 0; }
     .code-container { position: relative; background: #2B2B2B; margin: 1em 0; border-radius: 8px; overflow: hidden; }
-    .code-header { background: #313335; color: #BBB; font-size: 0.85em; padding: 0.2em 0.5em; display: flex; justify-content: space-between; align-items: center; }
+    .code-header { background: #313335; color: #BBB; font-size: 0.75rem; padding: 0.2em 0.5em; display: flex; justify-content: space-between; align-items: center; }
     .code-header .lang { font-weight: bold; }
     .code-header .copy-btn { cursor: pointer; color: #BBB; }
     .code-container pre { margin: 0; background: transparent; padding: 1em; overflow: auto; }
     .code-container code { background: transparent; }
-    .loading-container { position: relative; background: #2B2B2B; margin: 1em 0; border-radius: 8px; }
-    .loading-header { color: #BBB; font-size: 0.85em; padding: 0.2em 0.5em; }
-    .loading-shimmer { margin: 1em 0; }
-    .shimmer-line { position: relative; background-color: #333; height: 12px; margin: 4px 0; border-radius: 4px; overflow: hidden; }
+    .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; }
+    .loading-header { color: var(--vscode-editor-foreground); font-size: 0.65rem; padding: 0.1em 0.3em; }
+    .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; }
+    .shimmer-line { width: 100%; background-color: #333; height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
     .shimmer-line::before { content: ''; position: absolute; top: 0; left: -150px; width: 150px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 1.5s infinite; animation-delay: var(--delay); }
     @keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300px); } }
-    #input { display: flex; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
-    #inputBox { flex: 1; padding: 8px; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; }
-    #sendBtn { margin-left: 8px; padding: 8px 12px; border: none; border-radius: 4px; background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); cursor: pointer; }
-    #sendBtn:hover { background-color: var(--vscode-button-hoverBackground); }
+    #input { display: flex; position: relative; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
+    #inputBox { flex: 1; padding: 8px; padding-right: 3em; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; font-size: 0.7rem; background-color: var(--vscode-input-background); color: var(--vscode-editor-foreground); outline: none; }
+    #sendBtn { position: absolute; top: 50%; right: 16px; transform: translateY(-50%); border: none; background: none; color: var(--vscode-button-foreground); cursor: pointer; padding: 0; font-size: 0.85rem; outline: none; }
+    #inputBox:focus, #sendBtn:focus { outline: none; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js" nonce="${nonce}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js" nonce="${nonce}"></script>
@@ -102,7 +111,7 @@ class ChatViewProvider {
   <div id="messages"></div>
   <div id="input">
     <input type="text" id="inputBox" placeholder="Type a message..." />
-    <button id="sendBtn">Send</button>
+    <button id="sendBtn">➤</button>
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -118,6 +127,13 @@ class ChatViewProvider {
       const input = document.getElementById('inputBox');
       const text = input.value;
       if (text) { vscode.postMessage({ command: 'userPrompt', text }); input.value = ''; }
+    });
+    // send on Enter key
+    document.getElementById('inputBox').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('sendBtn').click();
+      }
     });
     window.addEventListener('message', event => {
       const msg = event.data;
