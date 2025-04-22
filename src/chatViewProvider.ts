@@ -102,6 +102,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     window.addEventListener('message', event => {
       const msg = event.data;
       if (msg.command === 'startLoading') {
+        // clear previous answer buffer and element
+        streamBuffer = '';
+        streamDiv = null;
         if (loadingDiv) loadingDiv.remove();
         loadingDiv = document.createElement('div');
         loadingDiv.className = 'message bot loading-container';
