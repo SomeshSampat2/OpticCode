@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.classifyQueryIntent = exports.generateEditStream = exports.generateEdit = void 0;
+exports.classifyQueryType = exports.classifyQueryIntent = exports.generateEditStream = exports.generateEdit = void 0;
 const vscode = __importStar(require("vscode"));
 const undici_1 = require("undici");
 globalThis.fetch = undici_1.fetch;
@@ -108,3 +108,33 @@ async function classifyQueryIntent(query, fileList) {
     }
 }
 exports.classifyQueryIntent = classifyQueryIntent;
+/**
+ * Classifies the user query type: 'small_talk', 'explain_file', or 'code_query'.
+ */
+async function classifyQueryType(query) {
+    const config = vscode.workspace.getConfiguration('opticCode');
+    const apiKey = config.get('geminiApiKey');
+    if (!apiKey) {
+        vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+        return 'code_query';
+    }
+    const ai = new genai_1.GoogleGenAI({ apiKey });
+    const prompt = `You are a code assistant. Classify the following user query into one of three categories: "small_talk" (greetings), "explain_file" (explain current file), or "code_query" (code-related queries). Respond ONLY with a JSON object like {\"type\": \"<category>\"}. Query: "${query}"`;
+    const response = await ai.models.generateContent({
+        model: 'gemini-1.5-flash-8b',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: { type: genai_1.Type.OBJECT, properties: { type: { type: genai_1.Type.STRING } }, required: ['type'] }
+        }
+    });
+    try {
+        const obj = JSON.parse(response.text);
+        return obj.type;
+    }
+    catch {
+        vscode.window.showErrorMessage('Failed to parse query classification JSON.');
+        return 'code_query';
+    }
+}
+exports.classifyQueryType = classifyQueryType;

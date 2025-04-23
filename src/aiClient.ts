@@ -81,3 +81,32 @@ export async function classifyQueryIntent(query: string, fileList: string[]): Pr
     return [];
   }
 }
+
+/**
+ * Classifies the user query type: 'small_talk', 'explain_file', or 'code_query'.
+ */
+export async function classifyQueryType(query: string): Promise<string> {
+  const config = vscode.workspace.getConfiguration('opticCode');
+  const apiKey = config.get<string>('geminiApiKey');
+  if (!apiKey) {
+    vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+    return 'code_query';
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `You are a code assistant. Classify the following user query into one of three categories: "small_talk" (greetings), "explain_file" (explain current file), or "code_query" (code-related queries). Respond ONLY with a JSON object like {\"type\": \"<category>\"}. Query: "${query}"`;
+  const response = await ai.models.generateContent({
+    model: 'gemini-1.5-flash-8b',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: { type: Type.OBJECT, properties: { type: { type: Type.STRING } }, required: ['type'] }
+    }
+  });
+  try {
+    const obj = JSON.parse(response.text);
+    return obj.type;
+  } catch {
+    vscode.window.showErrorMessage('Failed to parse query classification JSON.');
+    return 'code_query';
+  }
+}
