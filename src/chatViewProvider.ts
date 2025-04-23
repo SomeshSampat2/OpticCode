@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { collectContext } from './contextCollector';
-import { generateEdit, generateEditStream } from './aiClient';
+import { collectContext, collectContextFor } from './contextCollector';
+import { generateEdit, generateEditStream, classifyQueryIntent } from './aiClient';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
@@ -25,17 +25,33 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         // show loading shimmer phases
         webviewView.webview.postMessage({ command: 'startLoading', phases: ['Understanding the request', 'Finding the solution', 'Thinking', 'Almost ready'] });
         // generate AI response
-        // start with workspace context
-        const ctx = await collectContext();
+        // determine context based on intent
+        const query = message.text;
+        const lower = query.trim().toLowerCase();
+        const greetingRegex = /^(hi|hello|hey|how are you|good morning|good afternoon|good evening)\b/i;
+        let ctx: string[];
+        if (greetingRegex.test(lower)) {
+          // small talk: no context
+          ctx = [];
+        } else if (/(this code|the code|this file)/i.test(query)) {
+          // explain current file
+          const activeEditor = vscode.window.activeTextEditor;
+          ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
+        } else {
+          // classify relevant files
+          const allUris = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
+          const allPaths = allUris.map(u => u.fsPath);
+          const selected = await classifyQueryIntent(query, allPaths);
+          if (selected.length > 0) {
+            ctx = await collectContextFor(selected);
+          } else {
+            const activeEditor = vscode.window.activeTextEditor;
+            ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
+          }
+        }
         if (this.conversationHistory.length > 0) {
           const historyText = this.conversationHistory.map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n');
           ctx.unshift('Conversation History:\n' + historyText);
-        }
-        // prepend active file content
-        const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor) {
-          const doc = activeEditor.document;
-          ctx.unshift(`${doc.fileName}:\n${doc.getText()}\n---`);
         }
         let responseText = '';
         // stream AI response in real-time

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { fetch as undiciFetch } from 'undici';
 (globalThis as any).fetch = undiciFetch;
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 // Gemini integration via VS Code configuration
 
@@ -51,5 +51,33 @@ export async function* generateEditStream(context: string[], userPrompt: string)
   });
   for await (const chunk of responseStream) {
     yield chunk.text;
+  }
+}
+
+/**
+ * Selects necessary files for a query using Gemini 1.5 flash 8B.
+ */
+export async function classifyQueryIntent(query: string, fileList: string[]): Promise<string[]> {
+  const config = vscode.workspace.getConfiguration('opticCode');
+  const apiKey = config.get<string>('geminiApiKey');
+  if (!apiKey) {
+    vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+    return [];
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `You are a code assistant. Given this question and a list of project files, return a JSON array of filenames required to answer.\nQuestion: "${query}"\nFiles: ${JSON.stringify(fileList)}\nRespond ONLY with a JSON array of filenames.`;
+  const response = await ai.models.generateContent({
+    model: 'gemini-1.5-flash-8b',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } }
+    }
+  });
+  try {
+    return JSON.parse(response.text);
+  } catch {
+    vscode.window.showErrorMessage('Failed to parse classification JSON.');
+    return [];
   }
 }

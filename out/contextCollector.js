@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.collectContext = void 0;
+exports.collectContextFor = exports.collectContext = void 0;
 const vscode = __importStar(require("vscode"));
 // Walks the workspace and collects simple context snippets from code files
 async function collectContext() {
@@ -39,3 +39,21 @@ async function collectContext() {
     return contexts;
 }
 exports.collectContext = collectContext;
+/**
+ * Collect context only from specified file paths.
+ */
+async function collectContextFor(filePaths) {
+    const contexts = [];
+    for (const path of filePaths) {
+        try {
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
+            const content = doc.getText();
+            contexts.push(`${path}:\n${content}\n---`);
+        }
+        catch {
+            // ignore missing or unreadable files
+        }
+    }
+    return contexts;
+}
+exports.collectContextFor = collectContextFor;
