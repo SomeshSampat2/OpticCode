@@ -28,7 +28,7 @@ const vscode = __importStar(require("vscode"));
 // Walks the workspace and collects simple context snippets from code files
 async function collectContext() {
     // find all TS/JS files, excluding node_modules
-    const files = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
+    const files = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,kts,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
     const contexts = [];
     for (const file of files) {
         const doc = await vscode.workspace.openTextDocument(file);

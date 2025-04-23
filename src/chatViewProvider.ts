@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { collectContext, collectContextFor } from './contextCollector';
 import { generateEdit, generateEditStream, classifyQueryIntent, classifyQueryType } from './aiClient';
 
@@ -29,11 +30,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const query = message.text;
         const queryType = await classifyQueryType(query);
         let ctx: string[];
+        let filePaths: string[];
         if (queryType === 'small_talk') {
           ctx = [];
+          filePaths = [];
         } else if (queryType === 'explain_file') {
           const activeEditor = vscode.window.activeTextEditor;
           ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
+          filePaths = activeEditor ? [activeEditor.document.fileName] : [];
         } else {
           // code_query: select relevant files
           const allUris = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
@@ -41,15 +45,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           const selected = await classifyQueryIntent(query, allPaths);
           if (selected.length > 0) {
             ctx = await collectContextFor(selected);
+            filePaths = selected;
           } else {
             const activeEditor = vscode.window.activeTextEditor;
             ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
+            filePaths = activeEditor ? [activeEditor.document.fileName] : [];
           }
         }
         if (this.conversationHistory.length > 0) {
           const historyText = this.conversationHistory.map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n');
           ctx.unshift('Conversation History:\n' + historyText);
         }
+        // display file list and count (bold names only)
+        const fileNames = filePaths.map(fp => `**${path.basename(fp)}**`);
+        const fileListText = filePaths.length > 0
+          ? `Context files (${filePaths.length}):\n${fileNames.join('\n')}`
+          : 'Context files (0): None';
+        webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: fileListText });
         let responseText = '';
         // stream AI response in real-time
         for await (const chunk of generateEditStream(ctx, message.text)) {
