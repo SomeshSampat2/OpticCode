@@ -46,22 +46,19 @@ class ChatViewProvider {
                 // show loading shimmer phases
                 webviewView.webview.postMessage({ command: 'startLoading', phases: ['Understanding the request', 'Finding the solution', 'Thinking', 'Almost ready'] });
                 // generate AI response
-                // determine context based on intent
+                // classify query type with AI
                 const query = message.text;
-                const lower = query.trim().toLowerCase();
-                const greetingRegex = /^(hi|hello|hey|how are you|good morning|good afternoon|good evening)\b/i;
+                const queryType = await (0, aiClient_1.classifyQueryType)(query);
                 let ctx;
-                if (greetingRegex.test(lower)) {
-                    // small talk: no context
+                if (queryType === 'small_talk') {
                     ctx = [];
                 }
-                else if (/(this code|the code|this file)/i.test(query)) {
-                    // explain current file
+                else if (queryType === 'explain_file') {
                     const activeEditor = vscode.window.activeTextEditor;
                     ctx = activeEditor ? await (0, contextCollector_1.collectContextFor)([activeEditor.document.fileName]) : [];
                 }
                 else {
-                    // classify relevant files
+                    // code_query: select relevant files
                     const allUris = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
                     const allPaths = allUris.map(u => u.fsPath);
                     const selected = await (0, aiClient_1.classifyQueryIntent)(query, allPaths);
