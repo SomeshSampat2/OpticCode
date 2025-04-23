@@ -15,3 +15,20 @@ export async function collectContext(): Promise<string[]> {
 
   return contexts;
 }
+
+/**
+ * Collect context only from specified file paths.
+ */
+export async function collectContextFor(filePaths: string[]): Promise<string[]> {
+  const contexts: string[] = [];
+  for (const path of filePaths) {
+    try {
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
+      const content = doc.getText();
+      contexts.push(`${path}:\n${content}\n---`);
+    } catch {
+      // ignore missing or unreadable files
+    }
+  }
+  return contexts;
+}

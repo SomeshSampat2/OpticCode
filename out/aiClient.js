@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateEditStream = exports.generateEdit = void 0;
+exports.classifyQueryIntent = exports.generateEditStream = exports.generateEdit = void 0;
 const vscode = __importStar(require("vscode"));
 const undici_1 = require("undici");
 globalThis.fetch = undici_1.fetch;
@@ -79,3 +79,32 @@ async function* generateEditStream(context, userPrompt) {
     }
 }
 exports.generateEditStream = generateEditStream;
+/**
+ * Selects necessary files for a query using Gemini 1.5 flash 8B.
+ */
+async function classifyQueryIntent(query, fileList) {
+    const config = vscode.workspace.getConfiguration('opticCode');
+    const apiKey = config.get('geminiApiKey');
+    if (!apiKey) {
+        vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+        return [];
+    }
+    const ai = new genai_1.GoogleGenAI({ apiKey });
+    const prompt = `You are a code assistant. Given this question and a list of project files, return a JSON array of filenames required to answer.\nQuestion: "${query}"\nFiles: ${JSON.stringify(fileList)}\nRespond ONLY with a JSON array of filenames.`;
+    const response = await ai.models.generateContent({
+        model: 'gemini-1.5-flash-8b',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: { type: genai_1.Type.ARRAY, items: { type: genai_1.Type.STRING } }
+        }
+    });
+    try {
+        return JSON.parse(response.text);
+    }
+    catch {
+        vscode.window.showErrorMessage('Failed to parse classification JSON.');
+        return [];
+    }
+}
+exports.classifyQueryIntent = classifyQueryIntent;
