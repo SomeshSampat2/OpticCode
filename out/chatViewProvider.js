@@ -25,6 +25,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatViewProvider = void 0;
 const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
 const contextCollector_1 = require("./contextCollector");
 const aiClient_1 = require("./aiClient");
 class ChatViewProvider {
@@ -50,12 +51,15 @@ class ChatViewProvider {
                 const query = message.text;
                 const queryType = await (0, aiClient_1.classifyQueryType)(query);
                 let ctx;
+                let filePaths;
                 if (queryType === 'small_talk') {
                     ctx = [];
+                    filePaths = [];
                 }
                 else if (queryType === 'explain_file') {
                     const activeEditor = vscode.window.activeTextEditor;
                     ctx = activeEditor ? await (0, contextCollector_1.collectContextFor)([activeEditor.document.fileName]) : [];
+                    filePaths = activeEditor ? [activeEditor.document.fileName] : [];
                 }
                 else {
                     // code_query: select relevant files
@@ -64,16 +68,24 @@ class ChatViewProvider {
                     const selected = await (0, aiClient_1.classifyQueryIntent)(query, allPaths);
                     if (selected.length > 0) {
                         ctx = await (0, contextCollector_1.collectContextFor)(selected);
+                        filePaths = selected;
                     }
                     else {
                         const activeEditor = vscode.window.activeTextEditor;
                         ctx = activeEditor ? await (0, contextCollector_1.collectContextFor)([activeEditor.document.fileName]) : [];
+                        filePaths = activeEditor ? [activeEditor.document.fileName] : [];
                     }
                 }
                 if (this.conversationHistory.length > 0) {
                     const historyText = this.conversationHistory.map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n');
                     ctx.unshift('Conversation History:\n' + historyText);
                 }
+                // display file list and count (bold names only)
+                const fileNames = filePaths.map(fp => `**${path.basename(fp)}**`);
+                const fileListText = filePaths.length > 0
+                    ? `Context files (${filePaths.length}):\n${fileNames.join('\n')}`
+                    : 'Context files (0): None';
+                webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: fileListText });
                 let responseText = '';
                 // stream AI response in real-time
                 for await (const chunk of (0, aiClient_1.generateEditStream)(ctx, message.text)) {
