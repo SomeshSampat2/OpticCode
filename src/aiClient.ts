@@ -8,7 +8,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 /**
  * Generates AI-based edit instructions given workspace context and a user prompt.
  */
-export async function generateEdit(context: string[], userPrompt: string): Promise<string> {
+export async function generateEdit(context: string[], userPrompt: string, inlineImage?: { mimeType: string; data: string }): Promise<string> {
   // fetch API key from settings
   const config = vscode.workspace.getConfiguration('opticCode');
   const apiKey = config.get<string>('geminiApiKey');
@@ -19,12 +19,12 @@ export async function generateEdit(context: string[], userPrompt: string): Promi
   const ai = new GoogleGenAI({ apiKey });
   // personality for AI assistant
   const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
-  const prompt = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+  const promptText = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+  const contents = inlineImage
+    ? [ { inlineData: { mimeType: inlineImage.mimeType, data: inlineImage.data } }, promptText ]
+    : promptText;
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: prompt
-    });
+    const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents });
     return response.text;
   } catch (err) {
     vscode.window.showErrorMessage('AI request failed: ' + (err as Error).message);
@@ -35,7 +35,7 @@ export async function generateEdit(context: string[], userPrompt: string): Promi
 /**
  * Streams AI-based responses for a user prompt using Gemini streaming.
  */
-export async function* generateEditStream(context: string[], userPrompt: string): AsyncGenerator<string> {
+export async function* generateEditStream(context: string[], userPrompt: string, inlineImage?: { mimeType: string; data: string }): AsyncGenerator<string> {
   const config = vscode.workspace.getConfiguration('opticCode');
   const apiKey = config.get<string>('geminiApiKey');
   if (!apiKey) {
@@ -44,11 +44,11 @@ export async function* generateEditStream(context: string[], userPrompt: string)
   }
   const ai = new GoogleGenAI({ apiKey });
   const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
-  const prompt = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
-  const responseStream = await ai.models.generateContentStream({
-    model: 'gemini-2.0-flash',
-    contents: prompt
-  });
+  const promptText = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+  const contents = inlineImage
+    ? [ { inlineData: { mimeType: inlineImage.mimeType, data: inlineImage.data } }, promptText ]
+    : promptText;
+  const responseStream = await ai.models.generateContentStream({ model: 'gemini-2.0-flash', contents });
   for await (const chunk of responseStream) {
     yield chunk.text;
   }
@@ -123,7 +123,7 @@ export async function classifyAdditionalContext(query: string, context: string[]
     return [];
   }
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `You are a code assistant. Given the user query: "${query}" and the current context from files:\n${context.join('\n')}\nDetermine if additional files are needed. Return a JSON array of full file paths for any additional files. If none, return an empty array. Respond ONLY with the JSON array.`;
+  const prompt = `Given the user query: "${query}" and the current context from files:\n${context.join('\n')}\nDetermine if additional files are needed. Return a JSON array of full file paths for any additional files. If none, return an empty array. Respond ONLY with the JSON array.`;
   const response = await ai.models.generateContent({
     model: 'gemini-2.0-flash',
     contents: prompt,
