@@ -175,9 +175,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .code-header .copy-btn { cursor: pointer; color: #BBB; }
     .code-container pre { margin: 0; background: transparent; padding: 1em; overflow: auto; }
     .code-container code { background: transparent; }
-    .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; }
+    .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; align-self: stretch; width: 100%; max-width: 100%; }
     .loading-header { color: var(--vscode-editor-foreground); font-size: 0.65rem; padding: 0.1em 0.3em; }
-    .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; }
+    .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; width: 100%; }
     .shimmer-line { width: 100%; background-color: #333; height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
     .shimmer-line::before { content: ''; position: absolute; top: 0; left: -150px; width: 150px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 1.5s infinite; animation-delay: var(--delay); }
     @keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300px); } }
