@@ -6,6 +6,7 @@ import { generateEdit, generateEditStream, classifyQueryIntent, classifyQueryTyp
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
   private conversationHistory: Array<{sender: 'user' | 'bot', text: string}> = [];
+  private pendingInlineImage: { mimeType: string; data: string } | undefined = undefined;
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -64,12 +65,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: fileListText });
         let responseText = '';
         // stream AI response in real-time
-        for await (const chunk of generateEditStream(ctx, message.text)) {
+        for await (const chunk of generateEditStream(ctx, message.text, this.pendingInlineImage)) {
           responseText += chunk;
           webviewView.webview.postMessage({ command: 'streamChunk', text: chunk });
         }
         // stop loading effects
         webviewView.webview.postMessage({ command: 'stopLoading' });
+        this.pendingInlineImage = undefined;
+        webviewView.webview.postMessage({ command: 'clearImagePreview' });
         // show Larger context button for code queries
         if (queryType === 'code_query') {
           webviewView.webview.postMessage({ command: 'showLargerContextButton', query, context: ctx });
@@ -96,6 +99,33 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
         webviewView.webview.postMessage({ command: 'stopLoading' });
         this.conversationHistory.push({ sender: 'bot', text: largerText });
+      } else if (message.command === 'attach') {
+        // handle image attach
+        if (message.type === 'image') {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { Images: ['png','jpg','jpeg','webp','heic','heif'] }
+          });
+          if (uris && uris.length > 0) {
+            const fileUri = uris[0];
+            const bytes = await vscode.workspace.fs.readFile(fileUri);
+            const base64 = Buffer.from(bytes).toString('base64');
+            const ext = path.extname(fileUri.fsPath).slice(1).toLowerCase();
+            let mimeType = '';
+            switch (ext) {
+              case 'png': mimeType = 'image/png'; break;
+              case 'jpg':
+              case 'jpeg': mimeType = 'image/jpeg'; break;
+              case 'webp': mimeType = 'image/webp'; break;
+              case 'heic': mimeType = 'image/heic'; break;
+              case 'heif': mimeType = 'image/heif'; break;
+              default: mimeType = 'application/octet-stream';
+            }
+            const dataUrl = `data:${mimeType};base64,${base64}`;
+            this.pendingInlineImage = { mimeType, data: base64 };
+            webviewView.webview.postMessage({ command: 'showImagePreview', dataUrl });
+          }
+        }
       }
     });
   }
@@ -107,7 +137,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src ${cspSource} data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
   <title>Optic Code Chat</title>
@@ -154,16 +184,71 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     #input { display: flex; position: relative; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
     #inputBox { flex: 1; padding: 8px; padding-right: 3em; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; font-size: 0.7rem; background-color: var(--vscode-input-background); color: var(--vscode-editor-foreground); outline: none; }
     #sendBtn { position: absolute; top: 50%; right: 16px; transform: translateY(-50%); border: none; background: none; color: var(--vscode-button-foreground); cursor: pointer; padding: 0; font-size: 0.85rem; outline: none; }
-    #inputBox:focus, #sendBtn:focus { outline: none; }
+    /* Attach button styling */
+    #attachBtn { position: absolute; top: 50%; right: 48px; transform: translateY(-50%); border: none; background: none; color: var(--vscode-button-foreground); cursor: pointer; padding: 0; font-size: 0.85rem; outline: none; }
+    /* Attach menu styling */
+    #attachMenu {
+      position: absolute;
+      bottom: 50px;
+      right: 16px;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      display: none;
+      z-index: 100;
+    }
+    .attach-option {
+      padding: 8px 12px;
+      width: 100%;
+      border: none;
+      background: none;
+      text-align: left;
+      font-size: 0.7rem;
+      color: var(--vscode-editor-foreground);
+      cursor: pointer;
+    }
+    .attach-option:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    /* Image preview styling */
+    #previewContainer {
+      display: none;
+      margin: 8px 10px;
+      align-items: center;
+    }
+    /* Enlarged image preview */
+    #previewContainer img {
+      max-height: 150px;
+      max-width: 150px;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    #clearImageBtn {
+      background: none;
+      border: none;
+      color: var(--vscode-button-foreground);
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 0;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js" nonce="${nonce}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js" nonce="${nonce}"></script>
 </head>
 <body>
   <div id="messages"></div>
+  <div id="previewContainer">
+    <img id="previewImg" src="" />
+    <button id="clearImageBtn">✕</button>
+  </div>
   <div id="input">
     <input type="text" id="inputBox" placeholder="Type a message..." />
+    <button id="attachBtn">＋</button>
     <button id="sendBtn">➤</button>
+  </div>
+  <div id="attachMenu">
+    <button class="attach-option" data-type="image">📷 Image</button>
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -178,7 +263,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     document.getElementById('sendBtn').addEventListener('click', () => {
       const input = document.getElementById('inputBox');
       const text = input.value;
-      if (text) { vscode.postMessage({ command: 'userPrompt', text }); input.value = ''; }
+      if (text) { 
+        vscode.postMessage({ command: 'userPrompt', text }); 
+        input.value = '';
+        document.getElementById('previewContainer').style.display = 'none';
+        document.getElementById('previewImg').src = '';
+      }
     });
     // send on Enter key
     document.getElementById('inputBox').addEventListener('keydown', (e) => {
@@ -297,7 +387,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           vscode.postMessage({ command: 'requestLargerContext', query: msg.query, context: msg.context });
         });
         return;
+      } else if (msg.command === 'showImagePreview') {
+        const container = document.getElementById('previewContainer');
+        const img = document.getElementById('previewImg');
+        img.src = msg.dataUrl;
+        container.style.display = 'flex';
+        return;
+      } else if (msg.command === 'clearImagePreview') {
+        const container = document.getElementById('previewContainer');
+        container.style.display = 'none';
+        return;
       }
+    });
+    // toggle attach menu
+    document.getElementById('attachBtn').addEventListener('click', () => {
+      const menu = document.getElementById('attachMenu');
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    });
+    // handle attach options
+    document.querySelectorAll('.attach-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.getAttribute('data-type');
+        vscode.postMessage({ command: 'attach', type });
+        document.getElementById('attachMenu').style.display = 'none';
+      });
+    });
+    // clear preview on button click
+    document.getElementById('clearImageBtn').addEventListener('click', () => {
+      const container = document.getElementById('previewContainer');
+      container.style.display = 'none';
+      document.getElementById('previewImg').src = '';
     });
   </script>
 </body>

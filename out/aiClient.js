@@ -32,7 +32,7 @@ const genai_1 = require("@google/genai");
 /**
  * Generates AI-based edit instructions given workspace context and a user prompt.
  */
-async function generateEdit(context, userPrompt) {
+async function generateEdit(context, userPrompt, inlineImage) {
     // fetch API key from settings
     const config = vscode.workspace.getConfiguration('opticCode');
     const apiKey = config.get('geminiApiKey');
@@ -43,12 +43,12 @@ async function generateEdit(context, userPrompt) {
     const ai = new genai_1.GoogleGenAI({ apiKey });
     // personality for AI assistant
     const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
-    const prompt = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+    const promptText = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+    const contents = inlineImage
+        ? [{ inlineData: { mimeType: inlineImage.mimeType, data: inlineImage.data } }, promptText]
+        : promptText;
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: prompt
-        });
+        const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents });
         return response.text;
     }
     catch (err) {
@@ -60,7 +60,7 @@ exports.generateEdit = generateEdit;
 /**
  * Streams AI-based responses for a user prompt using Gemini streaming.
  */
-async function* generateEditStream(context, userPrompt) {
+async function* generateEditStream(context, userPrompt, inlineImage) {
     const config = vscode.workspace.getConfiguration('opticCode');
     const apiKey = config.get('geminiApiKey');
     if (!apiKey) {
@@ -69,11 +69,11 @@ async function* generateEditStream(context, userPrompt) {
     }
     const ai = new genai_1.GoogleGenAI({ apiKey });
     const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
-    const prompt = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
-    const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.0-flash',
-        contents: prompt
-    });
+    const promptText = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
+    const contents = inlineImage
+        ? [{ inlineData: { mimeType: inlineImage.mimeType, data: inlineImage.data } }, promptText]
+        : promptText;
+    const responseStream = await ai.models.generateContentStream({ model: 'gemini-2.0-flash', contents });
     for await (const chunk of responseStream) {
         yield chunk.text;
     }
@@ -150,7 +150,7 @@ async function classifyAdditionalContext(query, context) {
         return [];
     }
     const ai = new genai_1.GoogleGenAI({ apiKey });
-    const prompt = `You are a code assistant. Given the user query: "${query}" and the current context from files:\n${context.join('\n')}\nDetermine if additional files are needed. Return a JSON array of full file paths for any additional files. If none, return an empty array. Respond ONLY with the JSON array.`;
+    const prompt = `Given the user query: "${query}" and the current context from files:\n${context.join('\n')}\nDetermine if additional files are needed. Return a JSON array of full file paths for any additional files. If none, return an empty array. Respond ONLY with the JSON array.`;
     const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
         contents: prompt,
