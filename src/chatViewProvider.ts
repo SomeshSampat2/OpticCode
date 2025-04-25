@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { collectContext, collectContextFor } from './contextCollector';
-import { generateEdit, generateEditStream, classifyQueryIntent, classifyQueryType } from './aiClient';
+import { generateEdit, generateEditStream, classifyQueryIntent, classifyQueryType, classifyAdditionalContext } from './aiClient';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
@@ -70,7 +70,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
         // stop loading effects
         webviewView.webview.postMessage({ command: 'stopLoading' });
+        // show Larger context button for code queries
+        if (queryType === 'code_query') {
+          webviewView.webview.postMessage({ command: 'showLargerContextButton', query, context: ctx });
+        }
         this.conversationHistory.push({ sender: 'bot', text: responseText });
+      } else if (message.command === 'requestLargerContext') {
+        const { query, context } = message;
+        this.conversationHistory.push({ sender: 'user', text: `[Larger context] ${query}` });
+        webviewView.webview.postMessage({ command: 'startLoading', phases: ['Assessing additional context', 'Fetching extra files', 'Reanalyzing', 'Almost there'] });
+        const additionalFiles = await classifyAdditionalContext(query, context as string[]);
+        let fullCtx = [...(context as string[])];
+        if (additionalFiles.length > 0) {
+          fullCtx = fullCtx.concat(await collectContextFor(additionalFiles));
+          const fileNames = additionalFiles.map(fp => `**${path.basename(fp)}**`);
+          webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: `Additional context files (${additionalFiles.length}):\n${fileNames.join('\n')}` });
+        } else {
+          webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: 'Additional context files (0): None' });
+        }
+        webviewView.webview.postMessage({ command: 'appendMessage', sender: 'bot', text: '### Answer with larger context:' });
+        let largerText = '';
+        for await (const chunk of generateEditStream(fullCtx, query)) {
+          largerText += chunk;
+          webviewView.webview.postMessage({ command: 'streamChunk', text: chunk });
+        }
+        webviewView.webview.postMessage({ command: 'stopLoading' });
+        this.conversationHistory.push({ sender: 'bot', text: largerText });
       }
     });
   }
@@ -87,6 +112,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
   <title>Optic Code Chat</title>
   <style>
+    .larger-context-btn {
+      display: inline-block;
+      margin: 12px auto;
+      padding: 8px 16px;
+      border: 1px solid var(--vscode-button-foreground);
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-align: center;
+      transition: background 0.2s ease, transform 0.1s ease;
+      cursor: pointer;
+    }
+    .larger-context-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+      transform: translateY(-1px);
+    }
+    .larger-context-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
     body { font-family: var(--vscode-editor-font-family); color: var(--vscode-editor-foreground); margin: 0; display: flex; flex-direction: column; height: 100vh; font-size: 0.7rem; }
     #messages { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; }
     .message { max-width: 80%; margin: 5px 0; padding: 6px; border-radius: 8px; word-wrap: break-word; font-size: 0.7rem; }
@@ -239,6 +286,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           container.appendChild(pre);
         });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      } else if (msg.command === 'showLargerContextButton') {
+        const btn = document.createElement('button');
+        btn.textContent = '🔍 Larger context';
+        btn.className = 'larger-context-btn';
+        messagesDiv.appendChild(btn);
+        btn.addEventListener('click', () => {
+          btn.disabled = true;
+          btn.textContent = '🔄 Loading larger context...';
+          vscode.postMessage({ command: 'requestLargerContext', query: msg.query, context: msg.context });
+        });
+        return;
       }
     });
   </script>
