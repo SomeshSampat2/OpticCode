@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.classifyQueryType = exports.classifyQueryIntent = exports.generateEditStream = exports.generateEdit = void 0;
+exports.classifyAdditionalContext = exports.classifyQueryType = exports.classifyQueryIntent = exports.generateEditStream = exports.generateEdit = void 0;
 const vscode = __importStar(require("vscode"));
 const undici_1 = require("undici");
 globalThis.fetch = undici_1.fetch;
@@ -138,3 +138,33 @@ async function classifyQueryType(query) {
     }
 }
 exports.classifyQueryType = classifyQueryType;
+/**
+ * Identifies additional files needed for a comprehensive answer.
+ * Uses full context content as input.
+ */
+async function classifyAdditionalContext(query, context) {
+    const config = vscode.workspace.getConfiguration('opticCode');
+    const apiKey = config.get('geminiApiKey');
+    if (!apiKey) {
+        vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+        return [];
+    }
+    const ai = new genai_1.GoogleGenAI({ apiKey });
+    const prompt = `You are a code assistant. Given the user query: "${query}" and the current context from files:\n${context.join('\n')}\nDetermine if additional files are needed. Return a JSON array of full file paths for any additional files. If none, return an empty array. Respond ONLY with the JSON array.`;
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: { type: genai_1.Type.ARRAY, items: { type: genai_1.Type.STRING } }
+        }
+    });
+    try {
+        return JSON.parse(response.text);
+    }
+    catch {
+        vscode.window.showErrorMessage('Failed to parse additional context JSON.');
+        return [];
+    }
+}
+exports.classifyAdditionalContext = classifyAdditionalContext;

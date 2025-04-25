@@ -110,3 +110,32 @@ export async function classifyQueryType(query: string): Promise<string> {
     return 'code_query';
   }
 }
+
+/**
+ * Identifies additional files needed for a comprehensive answer.
+ * Uses full context content as input.
+ */
+export async function classifyAdditionalContext(query: string, context: string[]): Promise<string[]> {
+  const config = vscode.workspace.getConfiguration('opticCode');
+  const apiKey = config.get<string>('geminiApiKey');
+  if (!apiKey) {
+    vscode.window.showErrorMessage('Please set opticCode.geminiApiKey in settings');
+    return [];
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `You are a code assistant. Given the user query: "${query}" and the current context from files:\n${context.join('\n')}\nDetermine if additional files are needed. Return a JSON array of full file paths for any additional files. If none, return an empty array. Respond ONLY with the JSON array.`;
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } }
+    }
+  });
+  try {
+    return JSON.parse(response.text);
+  } catch {
+    vscode.window.showErrorMessage('Failed to parse additional context JSON.');
+    return [];
+  }
+}
