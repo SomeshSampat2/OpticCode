@@ -60,11 +60,6 @@ class ChatViewProvider {
                     ctx = [];
                     filePaths = [];
                 }
-                else if (queryType === 'explain_file') {
-                    const activeEditor = vscode.window.activeTextEditor;
-                    ctx = activeEditor ? await (0, contextCollector_1.collectContextFor)([activeEditor.document.fileName]) : [];
-                    filePaths = activeEditor ? [activeEditor.document.fileName] : [];
-                }
                 else {
                     // code_query: include user-mentioned files and other relevant files
                     const allUris = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
