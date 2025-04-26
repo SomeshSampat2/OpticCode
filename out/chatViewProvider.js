@@ -33,9 +33,12 @@ class ChatViewProvider {
         this.extensionUri = extensionUri;
         this.conversationHistory = [];
         this.pendingInlineImage = undefined;
+        this.allFilePaths = [];
     }
-    resolveWebviewView(webviewView, context, _token) {
+    async resolveWebviewView(webviewView, context, _token) {
         console.log('▶️ ChatViewProvider.resolveWebviewView called');
+        // preload workspace files for custom context suggestions (only supported extensions)
+        this.allFilePaths = (await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,kts,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**')).map(u => u.fsPath);
         webviewView.webview.options = {
             enableScripts: true,
         };
@@ -126,6 +129,12 @@ class ChatViewProvider {
                 webviewView.webview.postMessage({ command: 'stopLoading' });
                 this.conversationHistory.push({ sender: 'bot', text: largerText });
             }
+            else if (message.command === 'getFileList') {
+                const q = (message.query || '').toLowerCase();
+                const matches = this.allFilePaths.filter(fp => fp.toLowerCase().includes(q)).slice(0, 10);
+                const fileNames = matches.map(fp => path.basename(fp));
+                webviewView.webview.postMessage({ command: 'fileSuggestions', files: fileNames });
+            }
             else if (message.command === 'attach') {
                 // handle image attach
                 if (message.type === 'image') {
@@ -211,15 +220,15 @@ class ChatViewProvider {
     .code-header .copy-btn { cursor: pointer; color: #BBB; }
     .code-container pre { margin: 0; background: transparent; padding: 1em; overflow: auto; }
     .code-container code { background: transparent; }
-    .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; }
+    .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; align-self: stretch; width: 100%; max-width: 100%; }
     .loading-header { color: var(--vscode-editor-foreground); font-size: 0.65rem; padding: 0.1em 0.3em; }
-    .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; }
+    .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; width: 100%; }
     .shimmer-line { width: 100%; background-color: #333; height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
     .shimmer-line::before { content: ''; position: absolute; top: 0; left: -150px; width: 150px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 1.5s infinite; animation-delay: var(--delay); }
     @keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300px); } }
     #input { display: flex; position: relative; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
-    #inputBox { flex: 1; padding: 8px; padding-right: 3em; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; font-size: 0.7rem; background-color: var(--vscode-input-background); color: var(--vscode-editor-foreground); outline: none; }
-    #sendBtn { position: absolute; top: 50%; right: 16px; transform: translateY(-50%); border: none; background: none; color: var(--vscode-button-foreground); cursor: pointer; padding: 0; font-size: 0.85rem; outline: none; }
+    .input-box { flex: 1; padding: 8px; padding-right: 3em; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; font-size: 0.7rem; background-color: var(--vscode-input-background); color: var(--vscode-editor-foreground); outline: none; min-height: 1.5em; }
+    .input-box:empty:before { content: attr(data-placeholder); color: var(--vscode-input-placeholderForeground); pointer-events: none; }
     /* Attach button styling */
     #attachBtn { position: absolute; top: 50%; right: 48px; transform: translateY(-50%); border: none; background: none; color: var(--vscode-button-foreground); cursor: pointer; padding: 0; font-size: 0.85rem; outline: none; }
     /* Attach menu styling */
@@ -268,18 +277,42 @@ class ChatViewProvider {
       font-size: 0.8rem;
       padding: 0;
     }
+    /* Custom context suggestions */
+    #suggestions {
+      position: absolute;
+      bottom: 3.2em;
+      left: 10px;
+      max-height: 150px;
+      overflow-y: auto;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 4px;
+      width: calc(100% - 20px);
+      z-index: 200;
+      display: none;
+    }
+    .suggestion-item {
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 0.7rem;
+      color: var(--vscode-editor-foreground);
+    }
+    .suggestion-item:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js" nonce="${nonce}"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js" nonce="${nonce}"></script>
 </head>
 <body>
   <div id="messages"></div>
+  <div id="suggestions"></div>
   <div id="previewContainer">
     <img id="previewImg" src="" />
     <button id="clearImageBtn">✕</button>
   </div>
   <div id="input">
-    <input type="text" id="inputBox" placeholder="Type a message..." />
+    <div id="inputBox" class="input-box" contenteditable="true" data-placeholder="Type a message..."></div>
     <button id="attachBtn">＋</button>
     <button id="sendBtn">➤</button>
   </div>
@@ -296,12 +329,26 @@ class ChatViewProvider {
     let phaseInterval = null;
     let streamDiv = null;
     let streamBuffer = '';
+    const suggestionsDiv = document.getElementById('suggestions');
+    const inputBox = document.getElementById('inputBox');
+    // input handler for custom context mentions
+    inputBox.addEventListener('input', () => {
+      const cursor = window.getSelection().anchorOffset;
+      const val = inputBox.innerText.slice(0, cursor);
+      const at = val.lastIndexOf('@');
+      if (at >= 0) {
+        const q = val.slice(at + 1);
+        vscode.postMessage({ command: 'getFileList', query: q });
+        suggestionsDiv.style.display = 'block';
+      } else {
+        suggestionsDiv.style.display = 'none';
+      }
+    });
     document.getElementById('sendBtn').addEventListener('click', () => {
-      const input = document.getElementById('inputBox');
-      const text = input.value;
-      if (text) { 
-        vscode.postMessage({ command: 'userPrompt', text }); 
-        input.value = '';
+      const text = inputBox.innerText.trim();
+      if (text) {
+        vscode.postMessage({ command: 'userPrompt', text });
+        inputBox.innerHTML = '';
         document.getElementById('previewContainer').style.display = 'none';
         document.getElementById('previewImg').src = '';
       }
@@ -432,6 +479,37 @@ class ChatViewProvider {
       } else if (msg.command === 'clearImagePreview') {
         const container = document.getElementById('previewContainer');
         container.style.display = 'none';
+        return;
+      } else if (msg.command === 'fileSuggestions') {
+        suggestionsDiv.innerHTML = '';
+        msg.files.forEach(f => {
+          const item = document.createElement('div');
+          item.textContent = f;
+          item.className = 'suggestion-item';
+          item.addEventListener('click', () => {
+            // replace text after last '@' with selected file mention
+            inputBox.focus();
+            const curText = inputBox.innerText;
+            const atIdx = curText.lastIndexOf('@');
+            const before = atIdx >= 0 ? curText.slice(0, atIdx) : curText;
+            inputBox.innerHTML = '';
+            inputBox.appendChild(document.createTextNode(before));
+            inputBox.appendChild(document.createTextNode('@'));
+            const bold = document.createElement('b');
+            bold.textContent = f;
+            inputBox.appendChild(bold);
+            inputBox.appendChild(document.createTextNode(' '));
+            suggestionsDiv.style.display = 'none';
+            // move caret to end of inputBox
+            const range = document.createRange();
+            range.selectNodeContents(inputBox);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          });
+          suggestionsDiv.appendChild(item);
+        });
         return;
       }
     });
