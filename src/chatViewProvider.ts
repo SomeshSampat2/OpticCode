@@ -41,35 +41,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (queryType === 'small_talk') {
           ctx = [];
           filePaths = [];
-        } else if (queryType === 'explain_file') {
-          const activeEditor = vscode.window.activeTextEditor;
-          ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
-          filePaths = activeEditor ? [activeEditor.document.fileName] : [];
         } else {
-          // code_query: include user-mentioned files and other relevant files
-          const allUris = await vscode.workspace.findFiles(
-            '**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}',
-            '**/node_modules/**'
-          );
-          const allPaths = allUris.map(u => u.fsPath);
-          // extract file names mentioned by user with '@'
-          const mentionMatches = [...query.matchAll(/@([^\s@]+)/g)].map(m => m[1]);
-          const mentionPaths = allPaths.filter(p => mentionMatches.includes(path.basename(p)));
-          // other files excluding mentioned ones
-          const otherPaths = allPaths.filter(p => !mentionPaths.includes(p));
-          // classify intent on remaining files
-          const intentSelected = mentionMatches.length > 0
-            ? await classifyQueryIntent(query, otherPaths)
-            : await classifyQueryIntent(query, allPaths);
-          const selectedPaths = mentionPaths.concat(intentSelected.filter(p => !mentionPaths.includes(p)));
-          if (selectedPaths.length > 0) {
-            ctx = await collectContextFor(selectedPaths);
-            filePaths = selectedPaths;
-          } else {
-            const activeEditor = vscode.window.activeTextEditor;
-            ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
-            filePaths = activeEditor ? [activeEditor.document.fileName] : [];
-          }
+            // code_query: include user-mentioned files and other relevant files
+            const allUris = await vscode.workspace.findFiles(
+              '**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,go,cpp,c,cs,php,rb,swift,rs}',
+              '**/node_modules/**'
+            );
+            const allPaths = allUris.map(u => u.fsPath);
+            // extract file names mentioned by user with '@'
+            const mentionMatches = [...query.matchAll(/@([^\s@]+)/g)].map(m => m[1]);
+            const mentionPaths = allPaths.filter(p => mentionMatches.includes(path.basename(p)));
+            // other files excluding mentioned ones
+            const otherPaths = allPaths.filter(p => !mentionPaths.includes(p));
+            // classify intent on remaining files
+            const intentSelected = mentionMatches.length > 0
+              ? await classifyQueryIntent(query, otherPaths)
+              : await classifyQueryIntent(query, allPaths);
+            const selectedPaths = mentionPaths.concat(intentSelected.filter(p => !mentionPaths.includes(p)));
+            if (selectedPaths.length > 0) {
+              ctx = await collectContextFor(selectedPaths);
+              filePaths = selectedPaths;
+            } else {
+              const activeEditor = vscode.window.activeTextEditor;
+              ctx = activeEditor ? await collectContextFor([activeEditor.document.fileName]) : [];
+              filePaths = activeEditor ? [activeEditor.document.fileName] : [];
+            }
         }
         if (this.conversationHistory.length > 0) {
           const historyText = this.conversationHistory.map(h => `${h.sender === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n');
