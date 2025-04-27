@@ -306,14 +306,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const suggestionsDiv = document.getElementById('suggestions');
     const inputBox = document.getElementById('inputBox');
     // input handler for custom context mentions
-    inputBox.addEventListener('input', () => {
-      const cursor = window.getSelection().anchorOffset;
+    inputBox.addEventListener('input', e => {
+      // ignore non-user input events (like programmatic content changes)
+      if (!e.isTrusted) return;
+      const sel = window.getSelection();
+      const cursor = sel.anchorOffset;
       const val = inputBox.innerText.slice(0, cursor);
       const at = val.lastIndexOf('@');
       if (at >= 0) {
         const q = val.slice(at + 1);
-        vscode.postMessage({ command: 'getFileList', query: q });
-        suggestionsDiv.style.display = 'block';
+        // hide when user finishes mention (space) or clears query
+        if (q.endsWith(' ') || q.trim().length === 0) {
+          suggestionsDiv.style.display = 'none';
+        } else {
+          vscode.postMessage({ command: 'getFileList', query: q });
+          suggestionsDiv.style.display = 'block';
+        }
       } else {
         suggestionsDiv.style.display = 'none';
       }
