@@ -1,8 +1,8 @@
 {
   "name": "optic-code",
   "displayName": "Optic Code",
-  "publisher": "your-publisher-name",
-  "version": "0.0.1",
+  "publisher": "SomeshSampat2",
+  "version": "1.0.0",
   "engines": { "vscode": "^1.75.0" },
   "activationEvents": [
     "onView:opticCode.chatView",
@@ -12,6 +12,18 @@
   ],
   "categories": ["Other"],
   "main": "./out/extension.js",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SomeshSampat2/OpticCode.git"
+  },
+  "license": "MIT",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "test": "npm test"
+  },
   "contributes": {
     "commands": [
       { "command": "opticCode.collectContext", "title": "Optic Code: Collect Context" },
@@ -45,12 +57,6 @@
         }
       ]
     }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p tsconfig.json",
-    "watch": "tsc -watch -p tsconfig.json",
-    "test": "npm test"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
