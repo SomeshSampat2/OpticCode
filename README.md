@@ -1,21 +1,33 @@
 # Optic Code
 
-A VS Code extension that collects code context and applies AI-powered edits.
+## Installation
 
-## Setup
+Install from VS Code Marketplace:
 
-1. `npm install`
-2. `npm run compile`
-3. Press F5 in VS Code to launch the extension host.
+1. Open Extensions (⇧⌘X or Ctrl+Shift+X).
+2. Search for **Optic Code**.
+3. Click **Install**.
 
-## Commands
+Or via CLI:
 
-- **Optic Code: Collect Context** — Collects AST/language-service context for the open workspace.
-- **Optic Code: Apply AI Edit** — Sends context + user request to AI, then applies the returned edits in the active editor.
+```bash
+code --install-extension SomeshSampat.optic-code
+```
 
-## Config
+## Configuration
 
-Place any custom rules in `.windsurfrules` at the workspace root.
+### Gemini API Key
+
+1. Open **Settings** (⇧⌘, or Ctrl+,).
+2. Search for `Optic Code: Gemini Api Key`.
+3. Paste your API key.
+
+## Features
+
+- **Context-Aware Chat**: Discuss and navigate your code with AI.
+- **AI-Powered Edits**: Apply contextual refactorings inline.
+- **File Mentions**: Type `@filename` to include that file's context.
+- **Image Attachments**: Attach screenshots in your chat.
 
 ### 📦 Resources
 - **Icon**: `resources/icon.svg`
