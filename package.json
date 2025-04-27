@@ -1,7 +1,7 @@
 {
   "name": "optic-code",
   "displayName": "Optic Code",
-  "publisher": "SomeshSampat2",
+  "publisher": "SomeshSampat",
   "version": "1.0.0",
   "engines": { "vscode": "^1.75.0" },
   "activationEvents": [
