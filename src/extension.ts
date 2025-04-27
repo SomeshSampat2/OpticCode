@@ -3,6 +3,17 @@ import { ChatViewProvider } from './chatViewProvider';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('▶️ Optic Code activated');
+  
+  // Ensure extension resources are available
+  try {
+    const resourcePath = vscode.Uri.joinPath(context.extensionUri, 'resources');
+    const libPath = vscode.Uri.joinPath(resourcePath, 'lib');
+    console.log('📦 Resource path:', resourcePath.fsPath);
+    console.log('📚 Library path:', libPath.fsPath);
+  } catch (error) {
+    console.error('❌ Error accessing extension resources:', error);
+  }
+  
   // register sidebar chat provider
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(

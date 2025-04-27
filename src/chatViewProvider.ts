@@ -153,13 +153,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   public getHtml(webview: vscode.Webview): string {
     const nonce = this.getNonce();
     const cspSource = webview.cspSource;
+    
+    // Define local resources
+    const markdownItUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'resources', 'lib', 'markdown-it.min.js'));
+    const highlightJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'resources', 'lib', 'highlight.min.js'));
+    const highlightCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'resources', 'lib', 'highlight-styles.min.css'));
+    
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src ${cspSource} data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${cspSource} data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="${highlightCssUri}">
   <title>Optic Code Chat</title>
   <style>
     .larger-context-btn {
@@ -276,8 +282,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-list-hoverBackground);
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js" nonce="${nonce}"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js" nonce="${nonce}"></script>
+  <script src="${markdownItUri}" nonce="${nonce}"></script>
+  <script src="${highlightJsUri}" nonce="${nonce}"></script>
 </head>
 <body>
   <div id="messages"></div>

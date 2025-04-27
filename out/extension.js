@@ -28,6 +28,16 @@ const vscode = __importStar(require("vscode"));
 const chatViewProvider_1 = require("./chatViewProvider");
 function activate(context) {
     console.log('▶️ Optic Code activated');
+    // Ensure extension resources are available
+    try {
+        const resourcePath = vscode.Uri.joinPath(context.extensionUri, 'resources');
+        const libPath = vscode.Uri.joinPath(resourcePath, 'lib');
+        console.log('📦 Resource path:', resourcePath.fsPath);
+        console.log('📚 Library path:', libPath.fsPath);
+    }
+    catch (error) {
+        console.error('❌ Error accessing extension resources:', error);
+    }
     // register sidebar chat provider
     context.subscriptions.push(vscode.window.registerWebviewViewProvider('opticCode.chatView', new chatViewProvider_1.ChatViewProvider(context.extensionUri)));
     // register command to open chat panel on the right
