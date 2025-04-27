@@ -1,6 +1,5 @@
 # VSCode Extension ignore file
 node_modules
-out
 .vscode
 .git
 .gitignore
