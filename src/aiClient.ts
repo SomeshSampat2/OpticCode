@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
 import { fetch as undiciFetch } from 'undici';
 (globalThis as any).fetch = undiciFetch;
+import * as vscode from 'vscode';
 import { GoogleGenAI, Type } from '@google/genai';
 
 // Gemini integration via VS Code configuration

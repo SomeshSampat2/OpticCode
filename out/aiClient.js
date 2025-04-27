@@ -24,9 +24,9 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.classifyAdditionalContext = exports.classifyQueryType = exports.classifyQueryIntent = exports.generateEditStream = exports.generateEdit = void 0;
-const vscode = __importStar(require("vscode"));
 const undici_1 = require("undici");
 globalThis.fetch = undici_1.fetch;
+const vscode = __importStar(require("vscode"));
 const genai_1 = require("@google/genai");
 // Gemini integration via VS Code configuration
 /**
