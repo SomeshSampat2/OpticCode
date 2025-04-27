@@ -4,3 +4,8 @@ node_modules
 .git
 .gitignore
 .vscodeignore
+.vscode-test/
+out/test/**
+src/**
+**/*.map
+tsconfig.json
