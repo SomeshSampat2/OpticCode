@@ -41,6 +41,7 @@ class ChatViewProvider {
         this.allFilePaths = (await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,kts,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**')).map(u => u.fsPath);
         webviewView.webview.options = {
             enableScripts: true,
+            localResourceRoots: [this.extensionUri]
         };
         webviewView.webview.html = this.getHtml(webviewView.webview);
         webviewView.webview.onDidReceiveMessage(async (message) => {
