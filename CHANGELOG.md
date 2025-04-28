@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.6] - 2025-05-10
+
+### Fixed
+- Fixed extension activation error related to missing dependencies
+- Implemented webpack bundling to include all required dependencies in the package
+
 ## [1.0.4] - 2025-05-10
 
 ### Fixed
