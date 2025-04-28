@@ -34,5 +34,6 @@ code --install-extension SomeshSampat.optic-code
 - **Screenshots**: Add usage images to `resources/screenshots/`
 
 ### 🚀 Release Notes
+- **1.0.6**: Fixed missing dependency issue by properly bundling all dependencies.
 - **1.0.4**: Fixed UI loading issue and improved resource loading reliability.
 - **1.0.0**: Initial public release with context-aware chat and AI-powered code editing.
