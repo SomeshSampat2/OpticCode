@@ -2,7 +2,7 @@
   "name": "optic-code",
   "displayName": "Optic Code",
   "publisher": "SomeshSampat",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "engines": { "vscode": "^1.75.0" },
   "activationEvents": [
     "onView:opticCode.chatView",
