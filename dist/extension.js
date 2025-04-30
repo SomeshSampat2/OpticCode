@@ -112,6 +112,7 @@ class ChatViewProvider {
         this.conversationHistory = [];
         this.pendingInlineImage = undefined;
         this.allFilePaths = [];
+        this.hasInitializedContext = false;
     }
     async resolveWebviewView(webviewView, context, _token) {
         console.log('▶️ ChatViewProvider.resolveWebviewView called');
@@ -123,6 +124,40 @@ class ChatViewProvider {
         };
         webviewView.webview.html = this.getHtml(webviewView.webview);
         webviewView.webview.onDidReceiveMessage(async (message) => {
+            if (message.command === 'initializeContext') {
+                webviewView.webview.postMessage({
+                    command: 'startLoading',
+                    phases: [
+                        'Analyzing project structure',
+                        'Scanning files',
+                        'Generating project context',
+                        'Creating OpticCode documentation'
+                    ]
+                });
+                webviewView.webview.postMessage({
+                    command: 'appendMessage',
+                    sender: 'bot',
+                    text: '*This process may take a few minutes depending on the project size...*'
+                });
+                try {
+                    await this.generateProjectContext(webviewView);
+                    this.hasInitializedContext = true;
+                    webviewView.webview.postMessage({ command: 'stopLoading' });
+                    webviewView.webview.postMessage({
+                        command: 'showMainUI',
+                        text: 'Project context has been successfully initialized! You can now start asking questions.'
+                    });
+                }
+                catch (error) {
+                    webviewView.webview.postMessage({ command: 'stopLoading' });
+                    webviewView.webview.postMessage({
+                        command: 'appendMessage',
+                        sender: 'bot',
+                        text: '❌ Error initializing project context: ' + error.message
+                    });
+                }
+                return;
+            }
             if (message.command === 'userPrompt') {
                 this.conversationHistory.push({ sender: 'user', text: message.text });
                 // display user message
@@ -257,6 +292,56 @@ class ChatViewProvider {
                 }
             }
         });
+    }
+    async generateProjectContext(webviewView) {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+        if (!workspaceRoot) {
+            throw new Error('No workspace folder found');
+        }
+        let contextContent = '# OpticCode Project Context\n\n';
+        contextContent += 'This file contains an overview of the project structure and file purposes.\n\n';
+        for (const filePath of this.allFilePaths) {
+            const relativePath = vscode.workspace.asRelativePath(filePath);
+            webviewView.webview.postMessage({
+                command: 'appendMessage',
+                sender: 'bot',
+                text: `Analyzing: ${relativePath}`
+            });
+            try {
+                const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+                const content = Buffer.from(fileContent).toString('utf8');
+                // Basic file analysis - we'll enhance this later
+                const fileInfo = await this.analyzeFile(content, relativePath);
+                contextContent += `\n## ${relativePath}\n${fileInfo}\n`;
+            }
+            catch (error) {
+                console.error(`Error processing file ${filePath}:`, error);
+            }
+        }
+        // Create or update readmeForOpticCode.md
+        const readmePath = vscode.Uri.file(path.join(workspaceRoot, 'readmeForOpticCode.md'));
+        await vscode.workspace.fs.writeFile(readmePath, Buffer.from(contextContent, 'utf8'));
+    }
+    async analyzeFile(content, filePath) {
+        // We'll enhance this with AI-based analysis later
+        const fileType = path.extname(filePath).slice(1);
+        let analysis = '### Overview\n';
+        // Basic file analysis
+        const lines = content.split('\n');
+        const imports = lines.filter(line => line.includes('import ') || line.includes('require('));
+        const exportedItems = lines.filter(line => line.includes('export '));
+        const classes = lines.filter(line => line.includes('class '));
+        const functions = lines.filter(line => line.includes('function '));
+        analysis += `- **Type**: ${fileType} file\n`;
+        if (imports.length)
+            analysis += `- **Dependencies**: ${imports.length} imports\n`;
+        if (exportedItems.length)
+            analysis += `- **Exports**: ${exportedItems.length} items\n`;
+        if (classes.length)
+            analysis += `- **Classes**: ${classes.length}\n`;
+        if (functions.length)
+            analysis += `- **Functions**: ${functions.length}\n`;
+        return analysis;
     }
     getHtml(webview) {
         const nonce = this.getNonce();
@@ -412,25 +497,66 @@ class ChatViewProvider {
     .suggestion-item:hover {
       background: var(--vscode-list-hoverBackground);
     }
+    .init-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .init-button {
+      margin-top: 20px;
+      padding: 12px 24px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    
+    .init-button:hover {
+      background: var(--vscode-button-hoverBackground);
+      transform: translateY(-2px);
+    }
+    
+    .main-ui {
+      display: none;
+      height: 100%;
+    }
   </style>
   <script src="${markdownItUri}" nonce="${nonce}"></script>
   <script src="${highlightJsUri}" nonce="${nonce}"></script>
 </head>
 <body>
-  <div id="messages"></div>
-  <div id="suggestions"></div>
-  <div id="previewContainer">
-    <img id="previewImg" src="" />
-    <button id="clearImageBtn">✕</button>
+  <div class="init-container" id="initContainer">
+    <h2>Welcome to OpticCode!</h2>
+    <p>To get started, we need to analyze your project structure.</p>
+    <p>This will help us provide more accurate and context-aware responses.</p>
+    <button class="init-button" id="initContextBtn">Initialize Project Context</button>
   </div>
-  <div id="input">
-    <div id="inputBox" class="input-box" contenteditable="true" data-placeholder="Type a message..."></div>
-    <button id="attachBtn">＋</button>
-    <button id="sendBtn">➤</button>
+  
+  <div class="main-ui" id="mainUI">
+    <div id="messages"></div>
+    <div id="suggestions"></div>
+    <div id="previewContainer">
+      <img id="previewImg" src="" />
+      <button id="clearImageBtn">✕</button>
+    </div>
+    <div id="input">
+      <div id="inputBox" class="input-box" contenteditable="true" data-placeholder="Type a message..."></div>
+      <button id="attachBtn">＋</button>
+      <button id="sendBtn">➤</button>
+    </div>
+    <div id="attachMenu">
+      <button class="attach-option" data-type="image">📷 Image</button>
+    </div>
   </div>
-  <div id="attachMenu">
-    <button class="attach-option" data-type="image">📷 Image</button>
-  </div>
+  
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     // initialize markdown-it
@@ -638,6 +764,16 @@ class ChatViewProvider {
           suggestionsDiv.appendChild(item);
         });
         return;
+      } else if (msg.command === 'showMainUI') {
+        initContainer.style.display = 'none';
+        mainUI.style.display = 'flex';
+        mainUI.style.flexDirection = 'column';
+        if (msg.text) {
+          const div = document.createElement('div');
+          div.className = 'message bot';
+          div.innerHTML = md.render(msg.text);
+          messagesDiv.appendChild(div);
+        }
       }
     });
     // toggle attach menu
@@ -658,6 +794,16 @@ class ChatViewProvider {
       const container = document.getElementById('previewContainer');
       container.style.display = 'none';
       document.getElementById('previewImg').src = '';
+    });
+    // Add initialization UI handling
+    const initContainer = document.getElementById('initContainer');
+    const mainUI = document.getElementById('mainUI');
+    const initContextBtn = document.getElementById('initContextBtn');
+    
+    initContextBtn.addEventListener('click', () => {
+      vscode.postMessage({ command: 'initializeContext' });
+      initContextBtn.disabled = true;
+      initContextBtn.textContent = 'Initializing...';
     });
   </script>
 </body>
@@ -714,36 +860,60 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.collectContextFor = exports.collectContext = void 0;
 const vscode = __importStar(__webpack_require__(1));
+const path = __importStar(__webpack_require__(3));
 // Walks the workspace and collects simple context snippets from code files
 async function collectContext() {
-    // find all TS/JS files, excluding node_modules
-    const files = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,kts,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
-    const contexts = [];
-    for (const file of files) {
-        const doc = await vscode.workspace.openTextDocument(file);
-        // take full file as context
-        const content = doc.getText();
-        contexts.push(`${file.fsPath}:\n${content}\n---`);
+    const context = [];
+    // First, try to get the OpticCode readme
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+    if (workspaceRoot) {
+        try {
+            const readmePath = vscode.Uri.file(path.join(workspaceRoot, 'readmeForOpticCode.md'));
+            const readmeContent = await vscode.workspace.fs.readFile(readmePath);
+            context.push('Project Overview:\n' + Buffer.from(readmeContent).toString('utf8'));
+        }
+        catch (error) {
+            // Readme not found or error reading it - that's okay
+        }
     }
-    return contexts;
+    // Get active editor content if any
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+        const content = activeEditor.document.getText();
+        context.push(`File: ${activeEditor.document.fileName}\n${content}`);
+    }
+    return context;
 }
 exports.collectContext = collectContext;
 /**
  * Collect context only from specified file paths.
  */
 async function collectContextFor(filePaths) {
-    const contexts = [];
-    for (const path of filePaths) {
+    const context = [];
+    // First, try to get the OpticCode readme
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+    if (workspaceRoot) {
         try {
-            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
-            const content = doc.getText();
-            contexts.push(`${path}:\n${content}\n---`);
+            const readmePath = vscode.Uri.file(path.join(workspaceRoot, 'readmeForOpticCode.md'));
+            const readmeContent = await vscode.workspace.fs.readFile(readmePath);
+            context.push('Project Overview:\n' + Buffer.from(readmeContent).toString('utf8'));
         }
-        catch {
-            // ignore missing or unreadable files
+        catch (error) {
+            // Readme not found or error reading it - that's okay
         }
     }
-    return contexts;
+    // Then collect content from specified files
+    for (const filePath of filePaths) {
+        try {
+            const uri = vscode.Uri.file(filePath);
+            const content = await vscode.workspace.fs.readFile(uri);
+            context.push(`File: ${filePath}\n${Buffer.from(content).toString('utf8')}`);
+        }
+        catch (error) {
+            console.error(`Error reading file ${filePath}:`, error);
+        }
+    }
+    return context;
 }
 exports.collectContextFor = collectContextFor;
 
