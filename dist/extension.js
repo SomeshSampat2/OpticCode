@@ -112,7 +112,6 @@ class ChatViewProvider {
         this.conversationHistory = [];
         this.pendingInlineImage = undefined;
         this.allFilePaths = [];
-        this.hasInitializedContext = false;
     }
     async resolveWebviewView(webviewView, context, _token) {
         console.log('▶️ ChatViewProvider.resolveWebviewView called');
@@ -124,40 +123,6 @@ class ChatViewProvider {
         };
         webviewView.webview.html = this.getHtml(webviewView.webview);
         webviewView.webview.onDidReceiveMessage(async (message) => {
-            if (message.command === 'initializeContext') {
-                webviewView.webview.postMessage({
-                    command: 'startLoading',
-                    phases: [
-                        'Analyzing project structure',
-                        'Scanning files',
-                        'Generating project context',
-                        'Creating OpticCode documentation'
-                    ]
-                });
-                webviewView.webview.postMessage({
-                    command: 'appendMessage',
-                    sender: 'bot',
-                    text: '*This process may take a few minutes depending on the project size...*'
-                });
-                try {
-                    await this.generateProjectContext(webviewView);
-                    this.hasInitializedContext = true;
-                    webviewView.webview.postMessage({ command: 'stopLoading' });
-                    webviewView.webview.postMessage({
-                        command: 'showMainUI',
-                        text: 'Project context has been successfully initialized! You can now start asking questions.'
-                    });
-                }
-                catch (error) {
-                    webviewView.webview.postMessage({ command: 'stopLoading' });
-                    webviewView.webview.postMessage({
-                        command: 'appendMessage',
-                        sender: 'bot',
-                        text: '❌ Error initializing project context: ' + error.message
-                    });
-                }
-                return;
-            }
             if (message.command === 'userPrompt') {
                 this.conversationHistory.push({ sender: 'user', text: message.text });
                 // display user message
@@ -293,56 +258,6 @@ class ChatViewProvider {
             }
         });
     }
-    async generateProjectContext(webviewView) {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-        if (!workspaceRoot) {
-            throw new Error('No workspace folder found');
-        }
-        let contextContent = '# OpticCode Project Context\n\n';
-        contextContent += 'This file contains an overview of the project structure and file purposes.\n\n';
-        for (const filePath of this.allFilePaths) {
-            const relativePath = vscode.workspace.asRelativePath(filePath);
-            webviewView.webview.postMessage({
-                command: 'appendMessage',
-                sender: 'bot',
-                text: `Analyzing: ${relativePath}`
-            });
-            try {
-                const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-                const content = Buffer.from(fileContent).toString('utf8');
-                // Basic file analysis - we'll enhance this later
-                const fileInfo = await this.analyzeFile(content, relativePath);
-                contextContent += `\n## ${relativePath}\n${fileInfo}\n`;
-            }
-            catch (error) {
-                console.error(`Error processing file ${filePath}:`, error);
-            }
-        }
-        // Create or update readmeForOpticCode.md
-        const readmePath = vscode.Uri.file(path.join(workspaceRoot, 'readmeForOpticCode.md'));
-        await vscode.workspace.fs.writeFile(readmePath, Buffer.from(contextContent, 'utf8'));
-    }
-    async analyzeFile(content, filePath) {
-        // We'll enhance this with AI-based analysis later
-        const fileType = path.extname(filePath).slice(1);
-        let analysis = '### Overview\n';
-        // Basic file analysis
-        const lines = content.split('\n');
-        const imports = lines.filter(line => line.includes('import ') || line.includes('require('));
-        const exportedItems = lines.filter(line => line.includes('export '));
-        const classes = lines.filter(line => line.includes('class '));
-        const functions = lines.filter(line => line.includes('function '));
-        analysis += `- **Type**: ${fileType} file\n`;
-        if (imports.length)
-            analysis += `- **Dependencies**: ${imports.length} imports\n`;
-        if (exportedItems.length)
-            analysis += `- **Exports**: ${exportedItems.length} items\n`;
-        if (classes.length)
-            analysis += `- **Classes**: ${classes.length}\n`;
-        if (functions.length)
-            analysis += `- **Functions**: ${functions.length}\n`;
-        return analysis;
-    }
     getHtml(webview) {
         const nonce = this.getNonce();
         const cspSource = webview.cspSource;
@@ -394,35 +309,23 @@ class ChatViewProvider {
     .code-container code { background: transparent; }
     .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; align-self: stretch; width: 100%; max-width: 100%; }
     .loading-header { color: var(--vscode-editor-foreground); font-size: 0.65rem; padding: 0.1em 0.3em; display: flex; align-items: center; }
+    .blue-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 8px;
+      border: 2px solid rgba(0, 122, 255, 0.2);
+      border-radius: 50%;
+      border-top-color: rgba(0, 122, 255, 1);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to {transform: rotate(360deg);}
+    }
     .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; width: 100%; }
     .shimmer-line { width: 100%; background-color: #333; height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
     .shimmer-line::before { content: ''; position: absolute; top: 0; left: -150px; width: 150px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 1.5s infinite; animation-delay: var(--delay); }
     @keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300px); } }
-    
-    /* Circular loader animation */
-    .loader-circle {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      margin-right: 10px;
-      border-radius: 50%;
-      border: 2.5px solid transparent;
-      border-top-color: #0078D7;
-      border-bottom-color: #0078D7;
-      border-left-color: rgba(0, 120, 215, 0.5);
-      border-right-color: rgba(0, 120, 215, 0.5);
-      box-shadow: 0 0 8px rgba(0, 120, 215, 0.4);
-      animation: loader-spin 0.8s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite, loader-glow 1.5s ease-in-out infinite alternate;
-    }
-    @keyframes loader-spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    @keyframes loader-glow {
-      0% { box-shadow: 0 0 5px rgba(0, 120, 215, 0.3); }
-      100% { box-shadow: 0 0 10px rgba(0, 120, 215, 0.6); }
-    }
-    
     #input { display: flex; position: relative; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
     .input-box { flex: 1; padding: 8px; padding-right: 3em; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; font-size: 0.7rem; background-color: var(--vscode-input-background); color: var(--vscode-editor-foreground); outline: none; min-height: 1.5em; }
     .input-box:empty:before { content: attr(data-placeholder); color: var(--vscode-input-placeholderForeground); pointer-events: none; }
@@ -497,66 +400,25 @@ class ChatViewProvider {
     .suggestion-item:hover {
       background: var(--vscode-list-hoverBackground);
     }
-    .init-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      padding: 20px;
-      text-align: center;
-    }
-    
-    .init-button {
-      margin-top: 20px;
-      padding: 12px 24px;
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s ease;
-    }
-    
-    .init-button:hover {
-      background: var(--vscode-button-hoverBackground);
-      transform: translateY(-2px);
-    }
-    
-    .main-ui {
-      display: none;
-      height: 100%;
-    }
   </style>
   <script src="${markdownItUri}" nonce="${nonce}"></script>
   <script src="${highlightJsUri}" nonce="${nonce}"></script>
 </head>
 <body>
-  <div class="init-container" id="initContainer">
-    <h2>Welcome to OpticCode!</h2>
-    <p>To get started, we need to analyze your project structure.</p>
-    <p>This will help us provide more accurate and context-aware responses.</p>
-    <button class="init-button" id="initContextBtn">Initialize Project Context</button>
+  <div id="messages"></div>
+  <div id="suggestions"></div>
+  <div id="previewContainer">
+    <img id="previewImg" src="" />
+    <button id="clearImageBtn">✕</button>
   </div>
-  
-  <div class="main-ui" id="mainUI">
-    <div id="messages"></div>
-    <div id="suggestions"></div>
-    <div id="previewContainer">
-      <img id="previewImg" src="" />
-      <button id="clearImageBtn">✕</button>
-    </div>
-    <div id="input">
-      <div id="inputBox" class="input-box" contenteditable="true" data-placeholder="Type a message..."></div>
-      <button id="attachBtn">＋</button>
-      <button id="sendBtn">➤</button>
-    </div>
-    <div id="attachMenu">
-      <button class="attach-option" data-type="image">📷 Image</button>
-    </div>
+  <div id="input">
+    <div id="inputBox" class="input-box" contenteditable="true" data-placeholder="Type a message..."></div>
+    <button id="attachBtn">＋</button>
+    <button id="sendBtn">➤</button>
   </div>
-  
+  <div id="attachMenu">
+    <button class="attach-option" data-type="image">📷 Image</button>
+  </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     // initialize markdown-it
@@ -618,10 +480,14 @@ class ChatViewProvider {
         const header = document.createElement('div');
         header.className = 'loading-header';
         
-        // Add circular loader
-        const loader = document.createElement('div');
-        loader.className = 'loader-circle';
-        header.appendChild(loader);
+        // Add blue spinner
+        const spinner = document.createElement('div');
+        spinner.className = 'blue-spinner';
+        header.appendChild(spinner);
+        
+        // Create text node for phase text
+        const phaseText = document.createElement('span');
+        header.appendChild(phaseText);
         
         loadingDiv.appendChild(header);
         // create multiline shimmer
@@ -640,11 +506,10 @@ class ChatViewProvider {
         messagesDiv.appendChild(loadingDiv);
         // animate header text and dots
         let phaseIndex = 0, dotCount = 0;
-        header.appendChild(document.createTextNode(msg.phases[0]));
+        phaseText.textContent = msg.phases[0];
         dotInterval = setInterval(() => {
           dotCount = (dotCount % 3) + 1;
-          // Update just the text node, not the circular loader
-          header.childNodes[1].textContent = msg.phases[phaseIndex] + '.'.repeat(dotCount);
+          phaseText.textContent = msg.phases[phaseIndex] + '.'.repeat(dotCount);
         }, 500);
         phaseInterval = setInterval(() => {
           if (phaseIndex < msg.phases.length - 1) {
@@ -764,16 +629,6 @@ class ChatViewProvider {
           suggestionsDiv.appendChild(item);
         });
         return;
-      } else if (msg.command === 'showMainUI') {
-        initContainer.style.display = 'none';
-        mainUI.style.display = 'flex';
-        mainUI.style.flexDirection = 'column';
-        if (msg.text) {
-          const div = document.createElement('div');
-          div.className = 'message bot';
-          div.innerHTML = md.render(msg.text);
-          messagesDiv.appendChild(div);
-        }
       }
     });
     // toggle attach menu
@@ -794,16 +649,6 @@ class ChatViewProvider {
       const container = document.getElementById('previewContainer');
       container.style.display = 'none';
       document.getElementById('previewImg').src = '';
-    });
-    // Add initialization UI handling
-    const initContainer = document.getElementById('initContainer');
-    const mainUI = document.getElementById('mainUI');
-    const initContextBtn = document.getElementById('initContextBtn');
-    
-    initContextBtn.addEventListener('click', () => {
-      vscode.postMessage({ command: 'initializeContext' });
-      initContextBtn.disabled = true;
-      initContextBtn.textContent = 'Initializing...';
     });
   </script>
 </body>
@@ -860,60 +705,36 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.collectContextFor = exports.collectContext = void 0;
 const vscode = __importStar(__webpack_require__(1));
-const path = __importStar(__webpack_require__(3));
 // Walks the workspace and collects simple context snippets from code files
 async function collectContext() {
-    const context = [];
-    // First, try to get the OpticCode readme
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-    if (workspaceRoot) {
-        try {
-            const readmePath = vscode.Uri.file(path.join(workspaceRoot, 'readmeForOpticCode.md'));
-            const readmeContent = await vscode.workspace.fs.readFile(readmePath);
-            context.push('Project Overview:\n' + Buffer.from(readmeContent).toString('utf8'));
-        }
-        catch (error) {
-            // Readme not found or error reading it - that's okay
-        }
+    // find all TS/JS files, excluding node_modules
+    const files = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx,html,css,scss,less,json,md,yaml,yml,xml,java,py,kt,kts,go,cpp,c,cs,php,rb,swift,rs}', '**/node_modules/**');
+    const contexts = [];
+    for (const file of files) {
+        const doc = await vscode.workspace.openTextDocument(file);
+        // take full file as context
+        const content = doc.getText();
+        contexts.push(`${file.fsPath}:\n${content}\n---`);
     }
-    // Get active editor content if any
-    const activeEditor = vscode.window.activeTextEditor;
-    if (activeEditor) {
-        const content = activeEditor.document.getText();
-        context.push(`File: ${activeEditor.document.fileName}\n${content}`);
-    }
-    return context;
+    return contexts;
 }
 exports.collectContext = collectContext;
 /**
  * Collect context only from specified file paths.
  */
 async function collectContextFor(filePaths) {
-    const context = [];
-    // First, try to get the OpticCode readme
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-    if (workspaceRoot) {
+    const contexts = [];
+    for (const path of filePaths) {
         try {
-            const readmePath = vscode.Uri.file(path.join(workspaceRoot, 'readmeForOpticCode.md'));
-            const readmeContent = await vscode.workspace.fs.readFile(readmePath);
-            context.push('Project Overview:\n' + Buffer.from(readmeContent).toString('utf8'));
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
+            const content = doc.getText();
+            contexts.push(`${path}:\n${content}\n---`);
         }
-        catch (error) {
-            // Readme not found or error reading it - that's okay
+        catch {
+            // ignore missing or unreadable files
         }
     }
-    // Then collect content from specified files
-    for (const filePath of filePaths) {
-        try {
-            const uri = vscode.Uri.file(filePath);
-            const content = await vscode.workspace.fs.readFile(uri);
-            context.push(`File: ${filePath}\n${Buffer.from(content).toString('utf8')}`);
-        }
-        catch (error) {
-            console.error(`Error reading file ${filePath}:`, error);
-        }
-    }
-    return context;
+    return contexts;
 }
 exports.collectContextFor = collectContextFor;
 
@@ -967,15 +788,7 @@ async function generateEdit(context, userPrompt, inlineImage) {
     }
     const ai = new genai_1.GoogleGenAI({ apiKey });
     // personality for AI assistant
-    const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. Balance conciseness with clarity in your responses:
-
-1. For code explanation queries: Provide sufficient explanation to ensure understanding - include purpose, logic flow, and key concepts, but avoid excessive detail unless requested.
-
-2. For implementation tasks: Focus on delivering high-quality, well-structured code with essential comments. Include brief explanations of complex logic or architectural decisions.
-
-3. For UI implementations: Always provide modern, beautiful UI designs with clean layouts, appropriate spacing, accessibility features, and subtle animations where relevant. Follow current design trends and best practices.
-
-4. Keep answers focused on the specific question without unnecessary background information.`;
+    const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
     const promptText = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
     const contents = inlineImage
         ? [{ inlineData: { mimeType: inlineImage.mimeType, data: inlineImage.data } }, promptText]
@@ -1001,15 +814,7 @@ async function* generateEditStream(context, userPrompt, inlineImage) {
         return;
     }
     const ai = new genai_1.GoogleGenAI({ apiKey });
-    const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. Balance conciseness with clarity in your responses:
-
-1. For code explanation queries: Provide sufficient explanation to ensure understanding - include purpose, logic flow, and key concepts, but avoid excessive detail unless requested.
-
-2. For implementation tasks: Focus on delivering high-quality, well-structured code with essential comments. Include brief explanations of complex logic or architectural decisions.
-
-3. For UI implementations: Always provide modern, beautiful UI designs with clean layouts, appropriate spacing, accessibility features, and subtle animations where relevant. Follow current design trends and best practices.
-
-4. Keep answers focused on the specific question without unnecessary background information.`;
+    const systemInstructions = `You are Optic Code, a friendly and knowledgeable AI assistant specialized in coding. You guide users through coding tasks, provide clear examples, and also answer personality-related questions with a warm, helpful tone.`;
     const promptText = `${systemInstructions}\n\nWorkspace context:\n${context.join('\n')}\n--\nUser request: ${userPrompt}`;
     const contents = inlineImage
         ? [{ inlineData: { mimeType: inlineImage.mimeType, data: inlineImage.data } }, promptText]
