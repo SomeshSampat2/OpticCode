@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.7] - 2025-05-11
+
+### Improved
+- Enhanced loading indicator animation for better user experience
+- Optimized loading state visibility in the webview interface
+
 ## [1.0.6] - 2025-05-10
 
 ### Fixed

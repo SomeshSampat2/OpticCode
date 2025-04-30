@@ -203,35 +203,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .code-container code { background: transparent; }
     .loading-container { position: relative; background: transparent; margin: 0.5em 0; border-radius: 0; align-self: stretch; width: 100%; max-width: 100%; }
     .loading-header { color: var(--vscode-editor-foreground); font-size: 0.65rem; padding: 0.1em 0.3em; display: flex; align-items: center; }
+    .blue-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 8px;
+      border: 2px solid rgba(0, 122, 255, 0.2);
+      border-radius: 50%;
+      border-top-color: rgba(0, 122, 255, 1);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to {transform: rotate(360deg);}
+    }
     .loading-shimmer { display: flex; flex-direction: column; gap: 4px; margin: 0.5em 0; width: 100%; }
     .shimmer-line { width: 100%; background-color: #333; height: 8px; border-radius: 4px; overflow: hidden; position: relative; }
     .shimmer-line::before { content: ''; position: absolute; top: 0; left: -150px; width: 150px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: shimmer 1.5s infinite; animation-delay: var(--delay); }
     @keyframes shimmer { 0% { transform: translateX(0); } 100% { transform: translateX(300px); } }
-    
-    /* Circular loader animation */
-    .loader-circle {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      margin-right: 10px;
-      border-radius: 50%;
-      border: 2.5px solid transparent;
-      border-top-color: #0078D7;
-      border-bottom-color: #0078D7;
-      border-left-color: rgba(0, 120, 215, 0.5);
-      border-right-color: rgba(0, 120, 215, 0.5);
-      box-shadow: 0 0 8px rgba(0, 120, 215, 0.4);
-      animation: loader-spin 0.8s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite, loader-glow 1.5s ease-in-out infinite alternate;
-    }
-    @keyframes loader-spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    @keyframes loader-glow {
-      0% { box-shadow: 0 0 5px rgba(0, 120, 215, 0.3); }
-      100% { box-shadow: 0 0 10px rgba(0, 120, 215, 0.6); }
-    }
-    
     #input { display: flex; position: relative; padding: 10px; border-top: 1px solid var(--vscode-editorWidget-border); }
     .input-box { flex: 1; padding: 8px; padding-right: 3em; border: 1px solid var(--vscode-editorWidget-border); border-radius: 4px; font-size: 0.7rem; background-color: var(--vscode-input-background); color: var(--vscode-editor-foreground); outline: none; min-height: 1.5em; }
     .input-box:empty:before { content: attr(data-placeholder); color: var(--vscode-input-placeholderForeground); pointer-events: none; }
@@ -386,10 +374,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const header = document.createElement('div');
         header.className = 'loading-header';
         
-        // Add circular loader
-        const loader = document.createElement('div');
-        loader.className = 'loader-circle';
-        header.appendChild(loader);
+        // Add blue spinner
+        const spinner = document.createElement('div');
+        spinner.className = 'blue-spinner';
+        header.appendChild(spinner);
+        
+        // Create text node for phase text
+        const phaseText = document.createElement('span');
+        header.appendChild(phaseText);
         
         loadingDiv.appendChild(header);
         // create multiline shimmer
@@ -408,11 +400,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         messagesDiv.appendChild(loadingDiv);
         // animate header text and dots
         let phaseIndex = 0, dotCount = 0;
-        header.appendChild(document.createTextNode(msg.phases[0]));
+        phaseText.textContent = msg.phases[0];
         dotInterval = setInterval(() => {
           dotCount = (dotCount % 3) + 1;
-          // Update just the text node, not the circular loader
-          header.childNodes[1].textContent = msg.phases[phaseIndex] + '.'.repeat(dotCount);
+          phaseText.textContent = msg.phases[phaseIndex] + '.'.repeat(dotCount);
         }, 500);
         phaseInterval = setInterval(() => {
           if (phaseIndex < msg.phases.length - 1) {
